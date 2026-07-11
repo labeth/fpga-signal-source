@@ -11,9 +11,16 @@
 //   1 = triangle (0->255->0)               — symmetric, linear ramps.
 //   2 = square   (0 / 255)                 — sharp edges for trigger tests.
 //   3 = sine     (256-entry LUT)           — smooth, single amplitude.
+//
+// AMP (0..256) scales the peak-to-peak amplitude, OFF (0..255) sets the DC
+// centre: out = clamp(OFF + ((wave-128)*AMP)>>8, 0, 255). AMP=256/OFF=128 gives
+// the full-scale wave. Smaller AMP makes a small signal that fits within a few
+// divisions at a fine V/div (for per-detent trigger-level calibration).
 module dacgen #(
     parameter [31:0] INC  = 32'd42950, // ~1 kHz (100e6*INC/2^32)
-    parameter        WAVE = 0          // 0 saw, 1 triangle, 2 square, 3 sine
+    parameter        WAVE = 0,         // 0 saw, 1 triangle, 2 square, 3 sine
+    parameter        AMP  = 256,       // 0..256 amplitude scale
+    parameter        OFF  = 128        // 0..255 DC centre
 ) (
     input  wire       clk,             // 100 MHz, ball N14
     output wire [7:0] dac              // DB0..DB7  (LSB = dac[0])
@@ -32,14 +39,21 @@ module dacgen #(
     reg [7:0] sine;
     always @(posedge clk) sine <= sine_rom[phase[31:24]];
 
-    reg [7:0] code;
+    reg [7:0] wav;
     always @(*) begin
         case (WAVE)
-            32'd1:   code = tria;
-            32'd2:   code = sq;
-            32'd3:   code = sine;
-            default: code = saw;
+            32'd1:   wav = tria;
+            32'd2:   wav = sq;
+            32'd3:   wav = sine;
+            default: wav = saw;
         endcase
     end
-    assign dac = code;
+
+    // Amplitude scale + DC offset: signed centre, scale by AMP/256, re-centre on
+    // OFF, clamp to the 8-bit DAC range.
+    wire signed [9:0]  centred = $signed({2'b00, wav}) - 10'sd128;         // -128..127
+    wire signed [18:0] scaled  = centred * $signed(AMP[9:0]);              // *(0..256)
+    wire signed [11:0] shifted = $signed({4'b0, OFF[7:0]}) + $signed(scaled[18:8]); // OFF + scaled/256
+    wire [7:0] out = shifted[11] ? 8'd0 : (|shifted[10:8] ? 8'd255 : shifted[7:0]);
+    assign dac = out;
 endmodule

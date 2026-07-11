@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# build-dac.sh [freq_hz] [wave] — synthesize, place/route and FLASH the
-# TLC7524CN 8-bit DAC driver (dacgen.v) onto the Alchitry Au.
+# build-dac.sh [freq_hz] [wave] [amp] [off] — synthesize, place/route and FLASH
+# the TLC7524CN 8-bit DAC driver (dacgen.v) onto the Alchitry Au.
 #   freq_hz : output frequency in Hz (default 1000)
-#   wave    : 0 sawtooth (default), 1 triangle, 2 square
+#   wave    : 0 sawtooth (default), 1 triangle, 2 square, 3 sine
+#   amp     : 0..256 peak-to-peak amplitude scale (default 256 = full scale)
+#   off     : 0..255 DC centre code (default 128)
 #
 # Flow (same as build.sh): yosys -> nextpnr-xilinx -> fasm2frames.py ->
 # xc7frames2bit -> openFPGALoader. Set SUDO=sudo if flashing needs root.
@@ -10,6 +12,8 @@ set -e
 
 FHZ="${1:-1000}"
 WAVE="${2:-0}"
+AMP="${3:-256}"
+OFF="${4:-128}"
 FPGA="${FPGA:-$HOME/fpga}"
 SUDO="${SUDO:-}"
 NPNR="$FPGA/nextpnr-xilinx/nextpnr-xilinx"
@@ -28,13 +32,13 @@ export PYTHONPATH="$FPGA/prjxray:${PYTHONPATH:-}"
 # phase increment: fout = 100e6 * INC / 2^32  ->  INC = round(fout * 2^32 / 1e8)
 INC=$(python3 -c "print(int(round($FHZ * (2**32) / 100e6)))")
 ACTUAL=$(python3 -c "print(100e6 * $INC / 2**32)")
-echo ">>> DAC gen: ${FHZ} Hz (INC=$INC -> actual ${ACTUAL} Hz), wave=$WAVE"
+echo ">>> DAC gen: ${FHZ} Hz (INC=$INC -> actual ${ACTUAL} Hz), wave=$WAVE, amp=$AMP, off=$OFF"
 
 # --- synth ---
 yosys -q -p "
   read_verilog $PROJ/dacgen.v;
-  chparam -set INC $INC -set WAVE $WAVE dacgen;
-  synth_xilinx -flatten -abc9 -arch xc7 -top dacgen;
+  chparam -set INC $INC -set WAVE $WAVE -set AMP $AMP -set OFF $OFF dacgen;
+  synth_xilinx -flatten -abc9 -arch xc7 -nodsp -top dacgen;
   write_json $OUT/dacgen.json
 " 2> "$OUT/yosys.log" || { echo "YOSYS FAILED"; tail -25 "$OUT/yosys.log"; exit 1; }
 
@@ -56,4 +60,4 @@ echo ">>> bitstream: $(stat -c%s "$OUT/dacgen.bit") bytes"
 
 # --- flash (SRAM, volatile) — non-interactive sudo (FT2232 needs root here) ---
 echo a | sudo -S -p "" "$OFL" -b alchitry_au -m "$OUT/dacgen.bit" 2>&1 | tail -4
-echo ">>> flashed DAC gen ${ACTUAL} Hz wave=$WAVE"
+echo ">>> flashed DAC gen ${ACTUAL} Hz wave=$WAVE amp=$AMP off=$OFF"
