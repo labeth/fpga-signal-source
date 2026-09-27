@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# build-proto.sh <uart|spi|i2c> — synthesize, place/route and FLASH a serial-
+# build-proto.sh <uart|spi|i2c|sent> — synthesize, place/route and FLASH a serial-
 # protocol generator onto the Alchitry Au. These are the ground truth for the
 # scope's protocol decoder (app/internal/decode + the web decode.js):
 #   uart : 8N1 115200 UART TX, mirrored on C1 and C2 ("Hi \x55\xAA\x0F\xF0\n").
@@ -9,10 +9,10 @@
 # Flow: yosys -> nextpnr-xilinx -> fasm2frames.py -> xc7frames2bit -> openFPGALoader
 # Point $FPGA at your open Xilinx toolchain checkout (see README.md). Flashing the
 # Au's SRAM may need root — set SUDO=sudo if your user can't reach the FT2232 JTAG.
-set -e
+set -euo pipefail
 
-PROTO="${1:?usage: build-proto.sh <uart|spi|i2c>}"
-case "$PROTO" in uart|spi|i2c) ;; *) echo "unknown proto: $PROTO (use uart|spi|i2c)"; exit 2;; esac
+PROTO="${1:?usage: build-proto.sh <uart|spi|i2c|sent|mil1553|usbls>}"
+case "$PROTO" in uart|spi|i2c|sent|mil1553|usbls|can|flexray|manchester) ;; *) echo "unknown proto: $PROTO (use uart|spi|i2c|sent|mil1553|usbls|can|flexray|manchester)"; exit 2;; esac
 
 FPGA="${FPGA:-$HOME/fpga}"                 # toolchain root (override: FPGA=/path ./build-proto.sh ...)
 SUDO="${SUDO:-}"                            # set SUDO=sudo if flashing needs root
@@ -24,7 +24,8 @@ FASM2FRAMES="$FPGA/prjxray/utils/fasm2frames.py"
 PART=xc7a35tftg256-1
 OFL="$FPGA/openFPGALoader/build/openFPGALoader"
 PROJ="$(cd "$(dirname "$0")" && pwd)"
-OUT="$PROJ/out"
+OUT="${PROTO_OUT:-$PROJ/out}"
+XDC="${PROTO_XDC:-$PROJ/proto.xdc}"
 mkdir -p "$OUT"
 export PATH="$FPGA/oss-cad-suite/bin:$PATH"
 export PYTHONPATH="$FPGA/prjxray:${PYTHONPATH:-}"
@@ -37,7 +38,7 @@ yosys -q -p "
 " 2> "$OUT/yosys.log" || { echo "YOSYS FAILED"; tail -20 "$OUT/yosys.log"; exit 1; }
 
 # --- place & route ---
-"$NPNR" --chipdb "$CHIPDB" --xdc "$PROJ/proto.xdc" \
+"$NPNR" --router "${PROTO_ROUTER:-router2}" --chipdb "$CHIPDB" --xdc "$XDC" \
         --json "$OUT/$PROTO.json" --fasm "$OUT/$PROTO.fasm" \
         > "$OUT/nextpnr.log" 2>&1 || { echo "NEXTPNR FAILED"; tail -25 "$OUT/nextpnr.log"; exit 1; }
 
@@ -56,4 +57,4 @@ echo ">>> bitstream: $(stat -c%s "$OUT/$PROTO.bit") bytes"
 
 # --- flash (SRAM, volatile) ---
 $SUDO "$OFL" -b alchitry_au -m "$OUT/$PROTO.bit" 2>&1 | tail -4
-echo ">>> flashed $PROTO generator on C1=G1 + C2=M6"
+echo ">>> loaded $PROTO generator using $XDC (volatile SRAM)"
