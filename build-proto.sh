@@ -12,7 +12,7 @@
 set -euo pipefail
 
 PROTO="${1:?usage: build-proto.sh <uart|spi|i2c|sent|mil1553|usbls>}"
-case "$PROTO" in uart|spi|i2c|sent|mil1553|usbls|can|flexray|manchester) ;; *) echo "unknown proto: $PROTO (use uart|spi|i2c|sent|mil1553|usbls|can|flexray|manchester)"; exit 2;; esac
+case "$PROTO" in uart|spi|i2c|sent|mil1553|usbls|can|flexray|manchester|uartcnt*) ;; *) echo "unknown proto: $PROTO (use uart|spi|i2c|sent|mil1553|usbls|can|flexray|manchester)"; exit 2;; esac
 
 FPGA="${FPGA:-$HOME/fpga}"                 # toolchain root (override: FPGA=/path ./build-proto.sh ...)
 SUDO="${SUDO:-}"                            # set SUDO=sudo if flashing needs root
