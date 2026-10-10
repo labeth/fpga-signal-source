@@ -1,0 +1,15 @@
+# steps.v: the same stepped square on every scope-bench pin (A20/G1, A27/M6,
+# A2/T8, A8/R8, A11/L2), so C1 and C2 show it whichever wiring is in place.
+set_property LOC N14 [get_ports clk]
+set_property IOSTANDARD LVCMOS33 [get_ports clk]
+create_clock -period 10.000 -name clk [get_ports clk]
+set_property LOC G1 [get_ports {p[0]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {p[0]}]
+set_property LOC M6 [get_ports {p[1]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {p[1]}]
+set_property LOC T8 [get_ports {p[2]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {p[2]}]
+set_property LOC R8 [get_ports {p[3]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {p[3]}]
+set_property LOC L2 [get_ports {p[4]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {p[4]}]
