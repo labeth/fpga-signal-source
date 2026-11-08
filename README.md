@@ -117,3 +117,31 @@ sample rate, not the analog bandwidth (which only attenuates) or noise. The burs
 pattern also makes the super-resolution stacker's frequency-dependent gain
 visible in one capture (large gain at 50 MHz, tapering near Nyquist where
 alignment jitter — not noise — dominates).
+
+### MIDI song
+
+`midi_song.v` plays a MIDI song for the scope's BUS decode and its piano
+picture: the opening of Beethoven's *Für Elise* (public domain, entered by hand
+in `gen_midi_song.py`), right hand on MIDI channel 1 and left hand on channel 2
+(both piano), a sustained string pad on channel 3 (GM program 48). It is a
+31250 Bd 8N1 UART, idle high, on **A11 (ball L2) = scope C1**; **A2 (ball T8) =
+scope C2 is held low** (`midi_song.xdc`). The loop is 26 s, and the program
+changes go out only at its start, so a reader joining mid-loop sees channel 3
+as a piano until the next loop. The first byte comes 0.83 s after loading
+(entry 0's delay is the loop's closing gap).
+
+`gen_midi_song.py` writes `midi_song.hex`, the sequencer's ROM: one 24-bit word
+per byte, `[23]` last entry, `[22:8]` delay in ms from the start of the previous
+byte, `[7:0]` the byte. A byte goes out once its delay has passed and the line
+is free (delay 0 = back to back, exactly 10 bits apart); the generator models
+that rule when it rounds the delays, so the timing does not drift.
+
+```sh
+FPGA=/home/labeth/ws/fpga ./build-midi.sh          # ROM + bitstream, no load
+FPGA=/home/labeth/ws/fpga LOAD=1 ./build-midi.sh   # ... and load it (volatile SRAM)
+# or load the built bitstream directly:
+$FPGA/openFPGALoader/build/openFPGALoader -b alchitry_au -m out/a11-midi-song/midi_song.bit
+```
+
+`build-midi.sh` writes to `out/a11-midi-song/` (`MIDI_OUT` overrides) and needs
+no root.
